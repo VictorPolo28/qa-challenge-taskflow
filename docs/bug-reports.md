@@ -38,32 +38,43 @@ no existe boton  u opcion para crear el proyecto
 Resultado esperado:
 sedebe  mostrar un opcion  para crear  un proyecto al ususario
 
+
 Impacto:
 No permite eliminar proyectos innecesarios para el user  creados por error en la app
 
-### BUG-003: Cuando se elimina un proyecto desde la appi este se sigue mostrando en la lista de proyectos
-
-- Severidad: Alta
-- Componente: API
-- Endpoint: DELETE//api/projects/{project_id}
+### BUG-003: DELETE /api/projects/{id} retorna 200 para proyectos existentes pero en el front continua visible el projecto
+ 
+- Severidad:Alta  
+- Componente:API  
+- Endpoint:DELETE /api/projects/{id}  
 
 Precondiciones:
-API activa
+- Proyecto existente con un id valido
 
-Pasos:
-1. validar en Swagger 
-2. intentar eliminar un proyecto existente usando el id del proyecto que desea eliminar 
-3. Execute
+Pasos para reproducir:
+1. Ir a Swagger `/docs`
+2. Ejecutar GET /api/projects/{project_id} y obtener un ID válido
+3. Ejecutar DELETE /api/projects/{id} con ese ID
 
 Resultado actual:
-se recibe estado 404
+- Respuesta: 200 sin embargo el  proyecto continue siendo visible en el front
 
 Resultado esperado:
-200
+- Respuesta: 200 OK y que el proyecto deje de ser visble en el listado de proyectos
+- Proyecto eliminado correctamente
+
+Evidencia:
+Request:
+DELETE /api/projects/6d216d4d-603c-4f85-a8ff-fae810adfa84
+
+Response:
+200 ok
 
 Impacto:
+No es posible eliminar proyectos  
 
-No permite borrar  proyectos en modo administrador  ya que no se tiene uso  de la funcionalidad de la appi
+sugerencia:
+Validar existencia del proyecto antes de eliminar o corregir lógica del endpoint
 
 
 
@@ -110,49 +121,38 @@ Tener rescricion de  cantidad   de caracteres caracteres
 Impacto:
 satura de informacion las tareas crea  confusion  para los usuarios 
 
-### BUG-006: Opcion asignar vacio
+### BUG-006: API permite crear tareas sin usuario asignado sin validación
 
-- Severidad: Alta
+- Severidad: Media
 - Componente: API
-- Endpoint: POST/api/projects
-
-Precondiciones:
-API activa
-
-Pasos:
-1. selecionar el boton crear tarea
-2. llenar los campos requeridos  y confirmar la creacion de la tarea   con  todos los caracteres
-3.  no asginar la tarea   a nadie  y crear la tarea 
 
 Resultado actual:
-permite crear  una tarea   sin ser asignada 
+Se permite crear tareas sin campo "assignee_id"
 
 Resultado esperado:
-Tener como mandatorio  el campo asignar 
+Definir si el campo es obligatorio o manejar estado "sin asignar"
 
 Impacto:
-Crea  confusion  con respecto aquien se debe ahcer cargo  de  la tarea 
+Ambigüedad en responsabilidades de tareas
 
-### BUG-007: Confirmacion  de eliminacion de tarea
-- Severidad:  Alta
-- Componente: API
-- Endpoint: DELETE/api/tasks/{task_id}
+### BUG-007: Eliminación de tareas sin confirmación en UI
 
-Precondiciones:
-API activa
+- Severidad: Media  
+- Componente: Frontend  
+- Pantalla: Lista de tareas  
 
 Pasos:
-1. validar en el front una tarea previamente  creada
-2. Eliminar tarea previamente creado
+1. Crear una tarea
+2. Click en eliminar
 
 Resultado actual:
-eliminacion instantanea  de la tarea
+La tarea se elimina inmediatamente
 
 Resultado esperado:
-pop up de confirmacion de la eliminacion  de la tarea creada
- 
+Mostrar modal de confirmación antes de eliminar
 
-Impacto: puede producir la eliminacion de tarea de manera no intencional
+Impacto:
+Riesgo de eliminación accidental de datos
 
 ### BUG-008: Orden de  el nivel de prioridad no es coherente 
 - Severidad:  baja
@@ -357,7 +357,6 @@ Resultado esperado:
 El archivo Excel debe contener  las tareas que cumplen con los filtros aplicados 
 
 Impacto:
-
 Usuarios reciben información incorrecta o no deseada
 Experiencia de usuario negativa
 
@@ -399,4 +398,29 @@ Datos inconsistentes que afectan la toma de decisiones
 Mala experiencia de usuario al no poder visualizar todas las tareas por estado
 Posibles errores en reportes y seguimiento de proyectos
 
+### BUG-018: No permite crear usuarios desde el front
+Severidad: Alta
+Componente: Frontend 
+Endpoint: POST /api/users
 
+Precondiciones:
+Usuario autenticado 
+Formulario de creación de usuarios disponible
+
+Pasos:
+1. no existe  el botón "Crear Nuevo Usuario" o "Agregar Usuario"
+2. Completar todos los campos requeridos del formulario (username,nombre, email, rol, etc.)
+3. Hacer clic en el botón "Guardar" o "Crear Usuario"
+4. Observar la respuesta del sistema
+
+Resultado actual:
+El usuario no tiene  ninguna opcion desde el front para crear usuarios
+
+Resultado esperado:
+El sistema debe procesar la creación del usuario, mostrar un mensaje de confirmación exitosa y redirigir a la lista de usuarios donde aparecerá el nuevo usuario creado. En caso de error, debe mostrar mensajes claros indicando qué campos necesitan corrección.
+
+Impacto:
+Imposibilidad de agregar nuevos usuarios al sistema
+Bloqueo en la incorporación de nuevos miembros al equipo
+Dependencia de creación manual de usuarios por API directa
+Posible impacto en la incorporación de nuevos empleados o colaboradores

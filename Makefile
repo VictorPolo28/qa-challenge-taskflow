@@ -22,12 +22,23 @@ restart: stop start seed ## Reiniciar todo desde cero con datos frescos
 # ── El candidato debe implementar estos targets ──
 
 test-api: ## Ejecutar tests de API
-	@echo "❌ TODO: Implementar tests de API"
+	pip install pytest requests --quiet --break-system-packages 2>/dev/null || true
+	pytest tests/api/ -v --tb=short
 
 test-ui: ## Ejecutar tests de UI (E2E)
-	@echo "❌ TODO: Implementar tests de UI"
+	pip install playwright --quiet --break-system-packages 2>/dev/null || true
+	playwright install chromium --with-deps 2>/dev/null || playwright install chromium
+	mkdir -p tests/ui/test-results
+	cd tests/ui && python create_task.py
 
 test-perf: ## Ejecutar tests de rendimiento
-	@echo "❌ TODO: Implementar tests de rendimiento"
+	pip install locust --quiet --break-system-packages 2>/dev/null || true
+	locust -f tests/performance/locustfile.py \
+		--host=http://localhost:8080 \
+		--headless \
+		--users 50 \
+		--spawn-rate 5 \
+		--run-time 2m \
+		--csv=tests/performance/results/load_test
 
 test-all: test-api test-ui test-perf ## Ejecutar todos los tests

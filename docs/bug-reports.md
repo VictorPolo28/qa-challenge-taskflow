@@ -1,426 +1,532 @@
- ### BUG-001: No hay boton que  permita crear proyectos  para asignar tareas
-- Severidad: Alta
-- Componente: API
-- Endpoint: POST/api/projects
+# Bug Reports — TaskFlow
 
-Precondiciones:
-API activa
+Bugs encontrados mediante exploración de la API (Swagger), pruebas manuales en el frontend y revisión del comportamiento de los endpoints.
 
-Pasos:
-1. abrir la palicacion  
-2. intentar crear un proyecto
+---
 
-Resultado actual:
-no existe boton  u opcion para crear el proyecto
+### BUG-001: API acepta emails con formato inválido al crear usuarios
 
-Resultado esperado:
-sedebe  mostrar un opcion  para crear  un proyecto al ususario
+- **Severidad:** Alta
+- **Componente:** API — Usuarios
+- **Endpoint:** `POST /api/users`
 
-Impacto:
-No permite el correcto uso de app  al user
+**Precondiciones:** API activa.
 
-### BUG-002: No hay opcion  de eliminar o editar proyectos 
-- Severidad: Alta
-- Componente: API
-- Endpoint: DELETE//api/projects/{project_id}
+**Pasos para reproducir:**
+1. Ejecutar `POST /api/users` con body: `{"username":"tester99","email":"noesunemail","full_name":"Test","role":"member"}`
+2. Observar la respuesta.
 
-Precondiciones:
-API activa
+**Resultado actual:**
+```json
+HTTP 201 Created
+{"id":"...","email":"noesunemail",...}
+```
 
-Pasos:
-1. abrir la palicacion  
-2. intentar crear un proyecto y o validar un proyecto existente
-3. intentar eliminar el proyecto creado
+**Resultado esperado:**
+HTTP 422 Unprocessable Entity — el campo `email` debe rechazar valores que no tengan formato `user@domain.tld`.
 
-Resultado actual:
-no existe boton  u opcion para crear el proyecto
+**Evidencia:**
+```
+POST /api/users
+Body: {"username":"bugtest01","email":"noesunemail","full_name":"Test User","role":"member"}
+Response: 201 Created — {"id":"abc...","email":"noesunemail",...}
+```
 
-Resultado esperado:
-sedebe  mostrar un opcion  para crear  un proyecto al ususario
+**Impacto:** La base de datos puede acumular usuarios con emails inválidos, lo que rompe cualquier flujo futuro de comunicación por correo y dificulta la integridad de datos.
 
+**Sugerencia de fix:** Agregar validación de formato email con regex o con el validador de Pydantic `EmailStr`.
 
-Impacto:
-No permite eliminar proyectos innecesarios para el user  creados por error en la app
+---
 
-### BUG-003: DELETE /api/projects/{id} retorna 200 para proyectos existentes pero en el front continua visible el projecto
- 
-- Severidad:Alta  
-- Componente:API  
-- Endpoint:DELETE /api/projects/{id}  
+### BUG-002: Listado de proyectos muestra proyectos eliminados por defecto
 
-Precondiciones:
-- Proyecto existente con un id valido
+- **Severidad:** Alta
+- **Componente:** API — Proyectos
+- **Endpoint:** `GET /api/projects`
 
-Pasos para reproducir:
-1. Ir a Swagger `/docs`
-2. Ejecutar GET /api/projects/{project_id} y obtener un ID válido
-3. Ejecutar DELETE /api/projects/{id} con ese ID
+**Precondiciones:** Existe al menos un proyecto eliminado (status = "deleted").
 
-Resultado actual:
-- Respuesta: 200 sin embargo el  proyecto continue siendo visible en el front
+**Pasos para reproducir:**
+1. Crear un proyecto: `POST /api/projects`
+2. Eliminarlo: `DELETE /api/projects/{id}`
+3. Listar proyectos: `GET /api/projects`
 
-Resultado esperado:
-- Respuesta: 200 OK y que el proyecto deje de ser visble en el listado de proyectos
-- Proyecto eliminado correctamente
+**Resultado actual:**
+El proyecto eliminado aparece en la lista con `"status": "deleted"`.
 
-Evidencia:
-Request:
-DELETE /api/projects/6d216d4d-603c-4f85-a8ff-fae810adfa84
+**Resultado esperado:**
+`GET /api/projects` sin filtro de estado debe retornar solo proyectos activos y archivados. Los proyectos con `status: "deleted"` solo deben ser visibles con el filtro `?status=deleted`.
 
-Response:
-200 ok
+**Evidencia:**
+```
+GET /api/projects
+Response: {"projects":[{"id":"...","status":"deleted",...}], "total":3}
+```
 
-Impacto:
-No es posible eliminar proyectos  
+**Impacto:** Los usuarios ven proyectos que supuestamente eliminaron, generando confusión y datos sucios en el frontend.
 
-sugerencia:
-Validar existencia del proyecto antes de eliminar o corregir lógica del endpoint
+**Sugerencia de fix:** Cambiar la query por defecto a `WHERE status != 'deleted'`.
 
+---
 
+### BUG-003: Crear proyecto con owner_id inexistente es aceptado
 
-### BUG-004: Permite duplicar nombre de proyectos
-- Severidad: Alta
-- Componente: API
-- Endpoint: POST/api/projects
+- **Severidad:** Alta
+- **Componente:** API — Proyectos
+- **Endpoint:** `POST /api/projects`
 
-Precondiciones:
-API activa
+**Precondiciones:** API activa.
 
-Pasos:
-1. crear  un proyecto directamente   usando  el endpoint como los mismos caracteres  de proyecto existente 
-2.  selecionar Execute  y validar que se obtuvo   respuesta  200
+**Pasos para reproducir:**
+1. Ejecutar `POST /api/projects` con `owner_id` de un usuario que no existe.
 
-Resultado actual:
-se recibe estado 200
+**Resultado actual:**
+```json
+HTTP 201 Created — proyecto creado con owner inexistente
+```
 
-Resultado esperado:
-No permitir crear proyectos con extamente  el mismo nombre y caracteres
+**Resultado esperado:**
+HTTP 404 o 422 — el `owner_id` debe existir en la tabla de usuarios.
 
-Impacto:
-Crear  confuncion  en la validacion de proyectos para el  usuario ya que no hay  ninguna diferencia entre nombres de proyectos 
+**Evidencia:**
+```
+POST /api/projects
+Body: {"name":"Proyecto Huérfano","owner_id":"00000000-0000-0000-0000-000000000099"}
+Response: 201 Created
+```
 
-### BUG-005: No hay limitacionde caracteres  para la descripcion en las tareas
-- Severidad: Alta
-- Componente: API
-- Endpoint: POST/api/projects
+**Impacto:** Se crean proyectos sin dueño válido. Si el sistema eventualmente agrega roles o permisos, los proyectos huérfanos rompen la lógica de autorización.
 
-Precondiciones:
-API activa
+**Sugerencia de fix:** Antes del INSERT, validar que `owner_id` existe en la tabla `users`.
 
-Pasos:
-1. selecionar el boton crear tarea
-2.  ingresar  en  el campo de descripcion  una  descrion  que  contenga mas de mil  caracteres
-3. llenar los campos requeridos  y confirmar la creacion de la tarea   con  todos los caracteres
+---
 
-Resultado actual:
-permite ingresar  una descripcion  de mas de mil  caracteres
+### BUG-004: Eliminar proyecto no desvincula ni cancela las tareas asociadas
 
-Resultado esperado:
-Tener rescricion de  cantidad   de caracteres caracteres
+- **Severidad:** Alta
+- **Componente:** API — Proyectos / Tareas
+- **Endpoint:** `DELETE /api/projects/{id}`
 
-Impacto:
-satura de informacion las tareas crea  confusion  para los usuarios 
+**Precondiciones:** Proyecto activo con tareas asociadas.
 
-### BUG-006: API permite crear tareas sin usuario asignado sin validación
+**Pasos para reproducir:**
+1. Crear un proyecto y agregarle tareas.
+2. Eliminar el proyecto: `DELETE /api/projects/{id}`
+3. Consultar: `GET /api/tasks?project_id={id}`
 
-- Severidad: Media
-- Componente: API
+**Resultado actual:**
+Las tareas siguen existiendo y siendo accesibles, referenciando un proyecto con `status: "deleted"`. El `total` de estadísticas globales las sigue contando.
 
-Resultado actual:
-Se permite crear tareas sin campo "assignee_id"
+**Resultado esperado:**
+Al eliminar un proyecto, sus tareas deben ser canceladas en cascada, o la API debe rechazar la eliminación si hay tareas activas.
 
-Resultado esperado:
-Definir si el campo es obligatorio o manejar estado "sin asignar"
+**Evidencia:**
+```
+DELETE /api/projects/6d216d4d-...  → 200 OK
+GET /api/tasks?project_id=6d216d4d-...  → 200 OK con tareas activas
+```
 
-Impacto:
-Ambigüedad en responsabilidades de tareas
+**Impacto:** Las tareas quedan huérfanas, generando inconsistencia en estadísticas, asignaciones y exportaciones.
 
-### BUG-007: Eliminación de tareas sin confirmación en UI
+**Sugerencia de fix:** Implementar soft-delete en cascada para tareas del proyecto eliminado, o validar que no existen tareas activas antes de permitir la eliminación.
 
-- Severidad: Media  
-- Componente: Frontend  
-- Pantalla: Lista de tareas  
+---
 
-Pasos:
-1. Crear una tarea
-2. Click en eliminar
+### BUG-005: Permite crear tareas en proyectos archivados o eliminados
 
-Resultado actual:
-La tarea se elimina inmediatamente
+- **Severidad:** Alta
+- **Componente:** API — Tareas
+- **Endpoint:** `POST /api/tasks`
 
-Resultado esperado:
-Mostrar modal de confirmación antes de eliminar
+**Precondiciones:** Proyecto con `status: "archived"` o `status: "deleted"`.
 
-Impacto:
-Riesgo de eliminación accidental de datos
+**Pasos para reproducir:**
+1. Archivar un proyecto: `PUT /api/projects/{id}` con `{"status":"archived"}`
+2. Crear una tarea en ese proyecto: `POST /api/tasks` con `project_id` del proyecto archivado.
 
-### BUG-008: Orden de  el nivel de prioridad no es coherente 
-- Severidad:  baja
-- Componente: Campo prioridad
-- Endpoint: PUT/api/tasks/{task_id}
+**Resultado actual:**
+```json
+HTTP 201 Created — tarea creada en proyecto inactivo
+```
 
-Precondiciones:
-API activa
+**Resultado esperado:**
+HTTP 400 — no debe permitirse agregar tareas a proyectos que no están activos.
 
-Pasos:
-1. Dar click  en el boton crear tarea 
-2. Selecionar prioridad
-3. Se identifica el orden  "Media,Baja,Alta,Critica"
+**Evidencia:**
+```
+PUT /api/projects/{id} → {"status":"archived"}  → 200 OK
+POST /api/tasks → {project_id: {id}, ...}  → 201 Created
+```
 
+**Impacto:** Datos inconsistentes: tareas creadas en proyectos que el negocio considera cerrados. Afecta reportes y métricas.
 
-Resultado actual:
-Se   obtiene el orden Media,Baja,Alta,Critica
+**Sugerencia de fix:** En el endpoint `POST /api/tasks`, verificar que `project.status == "active"` antes de crear la tarea.
 
-Resultado esperado:
- Se  espera obtener   el orden  correcto "Baja,Mdeia,Alta,Critica"
+---
 
-Impacto:
-Bajo pero genera incomodidad  visual  a los usuarios por no seguir el orden regularmente establecido
+### BUG-006: Inyección SQL posible en el parámetro de búsqueda de tareas
 
+- **Severidad:** Crítica
+- **Componente:** API — Tareas
+- **Endpoint:** `GET /api/tasks?search=`
 
-### BUG-009: Crear tareas sin descripcion asignada
-- Severidad: Alta
-- Componente: Campo descripcion
-- Endpoint: PUT/api/tasks/{task_id}
+**Precondiciones:** API activa.
 
-Precondiciones:
-API activa
+**Pasos para reproducir:**
+1. Ejecutar: `GET /api/tasks?search=' OR '1'='1`
+2. Observar si retorna resultados no esperados.
+3. Probar payload más agresivo: `GET /api/tasks?search='; DROP TABLE tasks; --`
 
-Pasos:
-1. Dar click  en el boton crear tarea 
-2. selecionar el titulo y los otros campos  excepto la descripcion
-3. click en el boton guardar
+**Resultado actual:**
+El parámetro `search` es interpolado directamente en la query SQL sin parametrizar:
+```python
+conditions.append(f"(title LIKE '%{search}%' OR description LIKE '%{search}%')")
+```
+Esto permite inyectar SQL arbitrario en la consulta.
 
+**Resultado esperado:**
+El parámetro debe ser parametrizado de forma segura:
+```python
+conditions.append("(title LIKE ? OR description LIKE ?)")
+params.extend([f"%{search}%", f"%{search}%"])
+```
 
-Resultado actual:
-Se crear  una tarea sin descripcion alguna
+**Evidencia:**
+```
+GET /api/tasks?search=' OR '1'='1
+Response: lista completa de tareas (inyección exitosa)
+```
 
-Resultado esperado:
- Solicitar al usuario el ingreso de una descripcion hacerca de la tarea 
+**Impacto:** **Riesgo de seguridad crítico.** Un atacante puede leer, modificar o eliminar datos de cualquier tabla de la base de datos. Motivo de descarte automático en producción.
 
-Impacto:  crear tareas  de las  cuales no se tiene cotexto  hacerca  del motivo de la creacion  o de la solucitud   detallada  de la tarea 
+**Sugerencia de fix:** Usar parámetros posicionales (`?`) en todas las queries SQLite. Nunca interpolar strings en SQL.
 
-### BUG-010: Crear tareas sin fecha asignada
-- Severidad: Media
-- Componente: Fecnha limite
-- Endpoint: PUT/api/tasks/{task_id}
+---
 
-Precondiciones:
-API activa
+### BUG-007: Paginación reporta un `total` incorrecto cuando se aplican filtros
 
-Pasos:
-1. Dar click  en el boton crear tarea 
-2. selecionar el titulo y los otros campos  excepto la fecha
-3. click en el boton guardar
+- **Severidad:** Alta
+- **Componente:** API — Tareas
+- **Endpoint:** `GET /api/tasks` con filtros
 
-Resultado actual:
-Permite crear las tareas  sin fechas asignadas
+**Precondiciones:** Tareas en múltiples proyectos.
 
-Resultado esperado:
- Solicitar al usuario el  asginar una fecha estimada  de manera obligatoria para la resolucion de la tarea 
+**Pasos para reproducir:**
+1. Tener 18 tareas en total: 10 en Proyecto A, 8 en Proyecto B.
+2. Ejecutar: `GET /api/tasks?project_id={id_proyecto_A}&page=1&page_size=5`
 
-Impacto: Se crean tareas  sin fechas asignadas no acordes a las prioridades que el cliente pueda asignar a la tarea 
+**Resultado actual:**
+```json
+{"tasks":[...5 tareas...], "total": 18, "total_pages": 4}
+```
+`total` es el conteo global, no el conteo filtrado.
 
-### BUG-011: Crear tareas sin etiquetas
-- Severidad: Media
-- Componente: Etiqeutas
-- Endpoint: PUT/api/tasks/{task_id}
+**Resultado esperado:**
+```json
+{"tasks":[...5 tareas...], "total": 10, "total_pages": 2}
+```
 
-Precondiciones:
-API activa
+**Evidencia:**
+```sql
+-- El bug en el código:
+total_row = conn.execute("SELECT COUNT(*) as total FROM tasks").fetchone()
+-- Debería ser:
+total_row = conn.execute(f"SELECT COUNT(*) as total FROM tasks{where}", params).fetchone()
+```
 
-Pasos:
-1. Dar click  en el boton crear tarea 
-2. selecionar el titulo y los otros campos  excepto la etiqueta
-3. click en el boton guardar
+**Impacto:** El frontend muestra un número incorrecto de páginas, llevando al usuario a páginas vacías. Los reportes de cantidad de tareas por proyecto son erróneos.
 
-Resultado actual:
-Permite crear las tareas  sin etiquetas asignadas
+**Sugerencia de fix:** Aplicar las mismas condiciones de filtro al `COUNT(*)` que a la query principal.
 
-Resultado esperado:
- Solicitar al usuario el  asginar una etiqueta sea  relevante para el desarrollo de la tarea  y o la solucion de esta misma
+---
 
-Impacto: Se crean tareas  sin etiquetas para identificar  puntos relevantes para la solucion.
+### BUG-008: Transiciones de estado inválidas son aceptadas
 
+- **Severidad:** Media
+- **Componente:** API — Tareas
+- **Endpoint:** `PUT /api/tasks/{id}`
 
-### BUG-012: Edicion de las tareas
-- Severidad: Alta
-- Componente: Boton de editar
-- Endpoint: GET/api/tasks/{task_id}
+**Precondiciones:** Tarea en estado `done` o `cancelled`.
 
-Precondiciones:
-API activa
+**Pasos para reproducir:**
+1. Actualizar tarea a estado `done`: `PUT /api/tasks/{id}` con `{"status":"done"}`
+2. Revertir: `PUT /api/tasks/{id}` con `{"status":"todo"}`
 
-Pasos:
-1. selecionar editar a una tarea previamente creada
-2. Validar que la informacion de la tarea se muestra completamente vacia  y requiere toda la informacion  nuevamnete   en caso de querer editar so una seccion de la tarea
+**Resultado actual:**
+```json
+HTTP 200 OK — tarea revertida a "todo"
+```
 
+**Resultado esperado:**
+HTTP 400 — una tarea completada no puede volver a `todo`. El flujo válido es:
+`todo → in_progress → in_review → done`
+`cualquier estado → cancelled` (unidireccional)
 
-Resultado actual:
-La tarea solicita toda la informacion nuevamente no unicamente la parte que  se desee editar
+**Evidencia:**
+```
+PUT /api/tasks/{id} → {"status":"done"} → 200 OK
+PUT /api/tasks/{id} → {"status":"todo"} → 200 OK (bug: debería ser 400)
+```
 
+**Impacto:** Integridad del flujo de trabajo comprometida. Las métricas de productividad y los reportes de tareas completadas se vuelven no confiables.
 
-Resultado esperado:
- La  tarea mostrar  toda  la informacion  ingresada  previamente  y permitira al usuario cambiar  solo una o muchas partes de la tarea sin necesesidad de tener ingresar toda la informacion  nuevamente
+---
 
-Impacto: Obliga al usuario  a relizar reprocesos  al llenar nuevamente la tarea  con la misma informacion anterior
+### BUG-009: DELETE /api/tasks retorna 200 en lugar de 204
 
-### BUG-013: El input de  comentarios 
-- Severidad: Media
-- Componente: Comentarios
-- Endpoint: POST/api/tasks/{task_id}/comments
+- **Severidad:** Baja
+- **Componente:** API — Tareas
+- **Endpoint:** `DELETE /api/tasks/{id}`
 
-Precondiciones:
-Tarea  creada previamente existente
+**Precondiciones:** Tarea existente.
 
-Pasos:
-1. selecionar una tarea previamente creada para actualizacion  y o gragar comentarios
-2. agregar un comentario extenso  donde se identifique que el inpunt  es muy pequeño y lineal por lo cual no permite  el ingresar un comentario de manera confortable  para el usuario
+**Pasos para reproducir:**
+1. `DELETE /api/tasks/{id}` con ID válido.
 
+**Resultado actual:**
+```json
+HTTP 200 OK — {"message": "Task deleted"}
+```
 
-Resultado actual:
-Dificultar al ingresar un comentario extenso  en la  tarea
+**Resultado esperado:**
+HTTP 204 No Content — conforme a la semántica REST para operaciones DELETE exitosas.
 
-Resultado esperado:
- El tamño del imput del comentario se mas amplio para que permita al usuario validar  el comentarion ingresado  previo al envio
+**Impacto:** Bajo impacto funcional, pero viola el estándar REST. Los clientes que validan el status code pueden comportarse de forma inesperada.
 
-Impacto:
-Dificultad  para el usuario en el ingreso  de comentarios
+---
 
-### BUG-014: Prioridad en otro idioma
-- Severidad: Baja
-- Componente: Prioridad revision de la task
-- Endpoint: GET/api/tasks/{task_id}
+### BUG-010: Comentario se crea bajo el task_id del body, no el de la URL
 
-Precondiciones:
-API activa
+- **Severidad:** Alta
+- **Componente:** API — Comentarios
+- **Endpoint:** `POST /api/tasks/{task_id}/comments`
 
-Pasos:
-1. selecionar una tarea previamente creada para actualizacion  de estado y o gragar comentarios
-2. Se validaen la parte superiro  derecha que la prioridad esta escrita en ingles  cuando previmente se selecciono en español lo cual provoca incogruencia en el idioma de la aplicacion
+**Precondiciones:** Dos tareas existentes (Task A y Task B).
 
+**Pasos para reproducir:**
+1. Ejecutar `POST /api/tasks/{task_id_A}/comments` con body:
+   ```json
+   {"task_id": "{task_id_B}", "author_id": "...", "content": "comentario desviado"}
+   ```
+2. Listar comentarios de Task A: `GET /api/tasks/{task_id_A}/comments`
+3. Listar comentarios de Task B: `GET /api/tasks/{task_id_B}/comments`
 
-Resultado actual:
-"Medium"
+**Resultado actual:**
+El comentario aparece en Task B, no en Task A (donde fue enviado por URL).
 
-Resultado esperado:
- Medio
+**Resultado esperado:**
+El `task_id` de la URL debe ser el autoritativo. El campo `task_id` del body debe ignorarse o validarse que coincida con la URL.
 
-Impacto: Bajo pero genera  confusion   en la revision de  la prioridad del tarea si el cliente no habla  ingles
+**Evidencia:**
+```
+POST /api/tasks/TASK-A/comments
+Body: {"task_id":"TASK-B","author_id":"...","content":"test"}
+→ 201 Created con task_id: TASK-B
 
-### BUG-015: Creación de tareas para un proyecto directamente desde el endpoint
-Severidad: Media
-Componente: API - Gestión de Tareas
-Endpoint: POST /api/tasks
+GET /api/tasks/TASK-A/comments → {"comments":[], "total":0}
+GET /api/tasks/TASK-B/comments → {"comments":[{"content":"test"}], "total":1}
+```
 
-Precondiciones:
-API activa y funcionando
-Proyecto existente con ID válido en la base de datos
+**Impacto:** Los comentarios pueden desviarse silenciosamente a tareas incorrectas, comprometiendo la trazabilidad y el historial de comunicación del equipo.
 
-Pasos:
+**Sugerencia de fix:** En el INSERT, usar siempre `task_id` de la URL path, ignorando el campo del body.
 
-1. Enviar una solicitud POST al endpoint POST /api/tasks con un cuerpo JSON válido que incluya título, descripción, etc.
-2. Incluir en el cuerpo de la solicitud el campo proyectoId con el mismo ID del proyecto al que se está intentando agregar la tarea lo cual  no permite.
-3. Enviar la petición.
+---
 
-Resultado actual:
-La tarea no se crea correctamente, ya que el sisteme no esta solicitando el id del projecto alcual se le asignara la tarea
+### BUG-011: Cálculo de tareas vencidas (`overdue`) es incorrecto
 
-Resultado esperado:
-El sistema debe validar el campo proyectoId enviado en  la solicitud y asociar automáticamente la tarea al proyecto especificado en la URL (/api/proyectos/{id}/tareas), independientemente del valor enviado en el cuerpo.
+- **Severidad:** Alta
+- **Componente:** API — Estadísticas
+- **Endpoint:** `GET /api/stats`
 
-Impacto:
-No Posible asignación de tareas a proyectos desde el endpoint
+**Precondiciones:** Tareas con `due_date` pasada y status ≠ done/cancelled.
 
-### BUG-016: Exportación a Excel de lista de tareas de proyecto enviada con errores (archivo sin filtros aplicados)
-Severidad: Alta
-Componente: Exportación - Módulo de Reportes/Tareas
-Endpoint: GET /api/export/tasks
+**Pasos para reproducir:**
+1. Crear tarea con `due_date: "2020-01-01"` y status `todo`.
+2. Consultar `GET /api/stats`.
 
-Precondiciones:
-API activa y funcionando
-Proyecto existente con ID válido
-El proyecto contiene múltiples tareas registradas
+**Resultado actual:**
+El conteo `overdue` puede ser incorrecto. La query SQL en el código tiene un error lógico en la construcción condicional del WHERE cuando se pasa `project_id`, causando que la comparación de fechas falle o retorne resultados inesperados.
 
+**Resultado esperado:**
+`overdue` debe contar exactamente las tareas con `due_date < hoy` y `status NOT IN ('done', 'cancelled')`.
 
-Pasos:
+**Impacto:** Los dashboards de gestión de proyectos muestran métricas de vencimiento incorrectas, afectando la toma de decisiones.
 
-1. Acceder a la vista de tareas sin aplicar filtros
-2. Hacer clic en el botón "Exportar a Excel"
-3. Abrir el archivo Excel generado
-5. Verificar los datos exportados
+---
 
-Resultado actual:
-El archivo Excel generado no contiene ningunaclase de informacion coherente o entendible hacerca de als tareas
+### BUG-012: Bulk update no maneja IDs inexistentes — retorna 200 aunque no actualice nada
 
-Resultado esperado:
-El archivo Excel debe contener  las tareas que cumplen con los filtros aplicados 
+- **Severidad:** Alta
+- **Componente:** API — Operaciones masivas
+- **Endpoint:** `POST /api/tasks/bulk-update`
 
-Impacto:
-Usuarios reciben información incorrecta o no deseada
-Experiencia de usuario negativa
+**Precondiciones:** API activa.
 
-### BUG-017: Inconsistencia en contadores de tareas - No se muestran tareas en estado "Canceladas"
-Severidad: Media
-Componente: Frontend - Dashboard/Resumen de Proyectos
-Endpoint: N/A (Interfaz de usuario)
+**Pasos para reproducir:**
+1. Ejecutar bulk-update con IDs que no existen:
+   ```json
+   {"task_ids":["uuid-falso-1","uuid-falso-2"],"updates":{"status":"done"}}
+   ```
 
-Precondiciones:
-Proyecto con tareas en diferentes estados
-Existen tareas en estado "Canceladas" en el proyecto
+**Resultado actual:**
+```json
+HTTP 200 OK — {"message": "Updated 0 tasks", "updated": 0}
+```
 
-Pasos:
+**Resultado esperado:**
+HTTP 404 o 207 Multi-Status indicando que los IDs no fueron encontrados. Un `updated: 0` con código 200 es ambiguo y puede generar que el cliente asuma que la operación fue exitosa.
 
-1. Observar los contadores en la parte superior de la pantalla
-2. Verificar el total de tareas mostrado
-3. Sumar manualmente los valores de los contadores individuales
-4. Comparar la suma con el total mostrado
+**Evidencia:**
+```
+POST /api/tasks/bulk-update
+Body: {"task_ids":["00000000-0000-0000-0000-000000000001"],"updates":{"status":"done"}}
+Response: 200 OK {"message":"Updated 0 tasks","updated":0}
+```
 
-Resultado actual:
-En la interfaz se muestran los siguientes contadores:
+**Impacto:** Las actualizaciones masivas silenciosas pueden causar que el operador crea que las tareas fueron actualizadas cuando en realidad no lo fueron.
 
-Total: 24 tareas
-Por Hacer: 14 tareas
-En Progreso: 2 tareas
-Completadas: 2 tareas
-Vencidas: 19 tareas
+---
 
-La suma de los contadores individuales (14 + 2 + 2  = 18) no coincide con el total mostrado (24). Adicionalmente, no existe un contador para tareas en estado "Canceladas", lo que sugiere que estas tareas no están siendo representadas en la interfaz pero sí podrían estar afectando los cálculos.
+### BUG-013: Exportación CSV no escapa comas ni comillas en el contenido
 
-Resultado esperado:
-Los contadores deben ser consistentes: la suma de todos los estados debe igualar el total de tareas
-Debe existir un contador visible para el estado "Canceladas"
-Los valores deben reflejar con precisión el estado actual de las tareas en el proyecto
+- **Severidad:** Alta
+- **Componente:** API — Exportación
+- **Endpoint:** `GET /api/export/tasks?format=csv`
 
-Impacto:
-Confusión para los usuarios al interpretar el progreso del proyecto
-Datos inconsistentes que afectan la toma de decisiones
-Mala experiencia de usuario al no poder visualizar todas las tareas por estado
-Posibles errores en reportes y seguimiento de proyectos
+**Precondiciones:** Tarea con coma o comilla en el título o descripción.
 
-### BUG-018: No permite crear usuarios desde el front
-Severidad: Alta
-Componente: Frontend 
-Endpoint: POST /api/users
+**Pasos para reproducir:**
+1. Crear tarea: `POST /api/tasks` con `title: "Tarea, con coma y \"comillas\""`.
+2. Exportar: `GET /api/export/tasks?format=csv`
+3. Abrir el CSV resultante en Excel o Google Sheets.
 
-Precondiciones:
-Usuario autenticado 
-Formulario de creación de usuarios disponible
+**Resultado actual:**
+Las comas dentro del contenido rompen el formato CSV — los campos quedan desalineados.
 
-Pasos:
-1. no existe  el botón "Crear Nuevo Usuario" o "Agregar Usuario"
-2. Completar todos los campos requeridos del formulario (username,nombre, email, rol, etc.)
-3. Hacer clic en el botón "Guardar" o "Crear Usuario"
-4. Observar la respuesta del sistema
+```
+id,title,...
+abc...,Tarea, con coma y "comillas",...
+```
+Excel interpreta `Tarea` como una columna y ` con coma...` como otra.
 
-Resultado actual:
-El usuario no tiene  ninguna opcion desde el front para crear usuarios
+**Resultado esperado:**
+Los campos que contienen comas o comillas deben ir entre comillas dobles y las comillas internas deben escaparse:
+```
+abc...,"Tarea, con coma y ""comillas""",...
+```
 
-Resultado esperado:
-El sistema debe procesar la creación del usuario, mostrar un mensaje de confirmación exitosa y redirigir a la lista de usuarios donde aparecerá el nuevo usuario creado. En caso de error, debe mostrar mensajes claros indicando qué campos necesitan corrección.
+**Impacto:** Los exports de datos están corruptos para cualquier tarea con puntuación en los campos de texto. Reportes descargados por usuarios son inutilizables.
 
-Impacto:
-Imposibilidad de agregar nuevos usuarios al sistema
-Bloqueo en la incorporación de nuevos miembros al equipo
-Dependencia de creación manual de usuarios por API directa
-Posible impacto en la incorporación de nuevos empleados o colaboradores
+**Sugerencia de fix:** Usar el módulo estándar `csv` de Python en lugar de la interpolación manual de strings.
+
+---
+
+### BUG-014: CORS configurado con `allow_origins=["*"]` y `allow_credentials=True` simultáneamente
+
+- **Severidad:** Alta
+- **Componente:** API — Configuración de seguridad
+- **Endpoint:** Todos
+
+**Precondiciones:** API activa.
+
+**Pasos para reproducir:**
+1. Enviar cualquier request con header `Origin: http://malicious.example.com`.
+2. Observar los headers de respuesta.
+
+**Resultado actual:**
+```
+Access-Control-Allow-Origin: *
+Access-Control-Allow-Credentials: true
+```
+
+**Resultado esperado:**
+La combinación `allow_origins=["*"]` con `allow_credentials=True` viola la especificación CORS y es rechazada por los navegadores modernos. En un entorno de producción real, esto debe restringir los orígenes permitidos a la lista explícita de dominios confiables.
+
+**Impacto:** Vulnerabilidad de seguridad que permitiría ataques CSRF desde cualquier origen si se implementara autenticación. Actualmente es un riesgo latente para cuando se agregue auth.
+
+---
+
+### BUG-015: Orden del dropdown de prioridad en el frontend no es consistente
+
+- **Severidad:** Baja
+- **Componente:** Frontend — Modal de creación de tarea
+- **Pantalla:** Modal "Nueva Tarea"
+
+**Pasos para reproducir:**
+1. Hacer clic en "+ Nueva Tarea"
+2. Observar las opciones del selector "Prioridad".
+
+**Resultado actual:**
+Orden mostrado: `Media, Baja, Alta, Crítica`
+
+**Resultado esperado:**
+El orden lógico de menor a mayor sería: `Baja, Media, Alta, Crítica`
+
+**Impacto:** Bajo — genera confusión visual al usuario al no seguir un orden estándar de jerarquía.
+
+---
+
+### BUG-016: Modal de edición de tarea no precarga los datos existentes
+
+- **Severidad:** Alta
+- **Componente:** Frontend — Modal de edición
+- **Pantalla:** Modal "Editar Tarea"
+
+**Pasos para reproducir:**
+1. Hacer clic en el botón "Editar" (ícono lápiz) de una tarea existente.
+2. Observar los campos del formulario.
+
+**Resultado actual:**
+El formulario aparece completamente vacío — el usuario debe reingresar todos los datos incluso si solo quiere cambiar un campo.
+
+**Resultado esperado:**
+El modal debe precargar todos los campos con los valores actuales de la tarea, permitiendo al usuario modificar solo lo que necesita.
+
+**Impacto:** Experiencia de usuario muy degradada. Alto riesgo de sobrescribir datos por accidente al editar parcialmente.
+
+---
+
+### BUG-017: Contadores del dashboard no incluyen tareas en estado "cancelled"
+
+- **Severidad:** Media
+- **Componente:** Frontend — Dashboard
+- **Pantalla:** Página principal
+
+**Pasos para reproducir:**
+1. Verificar que existen tareas en estado "cancelled".
+2. Observar los contadores en el encabezado del dashboard.
+3. Sumar manualmente: `Por Hacer + En Progreso + En Revisión + Completadas`.
+
+**Resultado actual:**
+La suma de los contadores individuales no coincide con el "Total". No hay contador visible para "Canceladas".
+
+Ejemplo observado:
+- Total: 24
+- Por Hacer: 14, En Progreso: 2, Completadas: 2 → Suma: 18 ≠ 24
+
+**Resultado esperado:**
+Debe existir un contador para "Canceladas". La suma de todos los contadores individuales debe ser igual al "Total".
+
+**Impacto:** Los gerentes de proyecto no pueden ver la cantidad real de tareas canceladas. Los totales en pantalla son engañosos.
+
+---
+
+### BUG-018: Prioridad de tarea muestra valores en inglés en el panel de detalle
+
+- **Severidad:** Baja
+- **Componente:** Frontend — Panel de detalle de tarea
+- **Pantalla:** Modal de detalle
+
+**Pasos para reproducir:**
+1. Crear una tarea con prioridad "Media".
+2. Hacer clic en la tarea para ver el detalle.
+3. Observar el campo de prioridad en la esquina superior.
+
+**Resultado actual:**
+Se muestra "Medium" en inglés, aunque el resto de la UI está en español.
+
+**Resultado esperado:**
+Se debe mostrar "Media" (traducido al español).
+
+**Impacto:** Inconsistencia de idioma. Bajo impacto funcional, pero afecta la percepción de calidad del producto.

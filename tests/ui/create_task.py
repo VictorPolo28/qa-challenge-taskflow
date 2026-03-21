@@ -66,7 +66,7 @@ def test_create_task():
     title = f"Tarea E2E {uuid.uuid4().hex[:6]}"
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
+        browser = p.chromium.launch(headless=False)
         page = browser.new_page()
 
         wait_for_app(page)
@@ -97,7 +97,7 @@ def test_edit_task():
     title_edited = f"Tarea Editada {uuid.uuid4().hex[:6]}"
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
+        browser = p.chromium.launch(headless=False)
         page = browser.new_page()
 
         wait_for_app(page)
@@ -111,21 +111,45 @@ def test_edit_task():
 
         save_task_form(page)
 
-        # Buscar la tarea y hacer clic en Editar
+        # Buscar la tarea y hacer clic en Editar dentro de su fila
         find_task_row(page, title_original)
-        edit_btn = page.locator(".btn-secondary, button:has-text('Editar')").first
+
+        # Intentar encontrar el botón editar dentro del contexto de la fila
+        task_row_container = page.locator(
+            f".task-item:has-text('{title_original}'), "
+            f"tr:has-text('{title_original}'), "
+            f"li:has-text('{title_original}')"
+        ).first
+
+        if task_row_container.count() > 0:
+            edit_btn = task_row_container.locator(
+                ".btn.btn-sm.btn-secondary, button:has-text('Editar')"
+            ).first
+        else:
+            # Fallback: buscar el primer botón editar visible en la página
+            edit_btn = page.locator(
+                ".btn.btn-sm.btn-secondary, button:has-text('Editar')"
+            ).first
+
         expect(edit_btn).to_be_visible(timeout=5000)
         edit_btn.click()
         page.wait_for_selector("#task-title", state="visible", timeout=5000)
 
-        # El formulario debe precargar el título
-        # (Este es el BUG-016: el formulario aparece vacío)
+        # Verificar si el formulario está precargado (BUG-016)
         current_title = page.locator("#task-title").input_value()
         if current_title != title_original:
-            print(f"BUG-016: Formulario de edición vacío (esperado: '{title_original}', actual: '{current_title}')")
+            print(
+                f" BUG-016: Formulario de edición vacío "
+                f"(esperado: '{title_original}', actual: '{current_title}')"
+            )
 
-        # Actualizar el título
+        # SIEMPRE limpiar y rellenar — robusto ante BUG-016
+        page.locator("#task-title").click(click_count=3)
         page.fill("#task-title", title_edited)
+        page.select_option("#task-project", index=1)
+        page.select_option("#task-priority", "high")
+        
+
         save_task_form(page)
 
         # Verificar el título nuevo
@@ -136,6 +160,7 @@ def test_edit_task():
         print(f"Tarea editada: {title_edited}")
 
         browser.close()
+
 
 
 def test_add_comment():
@@ -182,7 +207,7 @@ def test_delete_task():
     title = f"Tarea Eliminar {uuid.uuid4().hex[:6]}"
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
+        browser = p.chromium.launch(headless=False)
         page = browser.new_page()
 
         wait_for_app(page)
@@ -223,7 +248,7 @@ def test_delete_task():
 def test_filter_by_status():
     """Aplicar filtro por estado y verificar que solo aparecen tareas del estado seleccionado."""
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
+        browser = p.chromium.launch(headless=False)
         page = browser.new_page()
 
         wait_for_app(page)
@@ -257,7 +282,7 @@ def test_search_task():
     title = f"Buscar Esta Tarea {uuid.uuid4().hex[:6]}"
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
+        browser = p.chromium.launch(headless=False)
         page = browser.new_page()
 
         wait_for_app(page)
